@@ -59,3 +59,9 @@ The core functionality involves using an AWS Lambda function (written in Python 
 - **GitHub Actions** automatically deploy Terraform configurations:
   - **Development Environment**: Triggered by a push to the `dev` branch.
   - **Production Environment**: Triggered by a push to the `main` branch.
+
+### Prerequisites
+
+1. Set up an AWS account with the necessary permissions.
+2. Configure OIDC Connect. [This](https://docs.github.com/en/actions/security-for-github-actions/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services) page offers guidance to setup in AWS and GitHub.
+3. Configure your GitHub repository for **GitHub Actions**.
