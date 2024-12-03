@@ -64,5 +64,5 @@ The core functionality involves using an AWS Lambda function (written in Python 
 
 1. Set up an AWS account with the necessary permissions.
 2. Configure OIDC Connect. [This](https://docs.github.com/en/actions/security-for-github-actions/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services) page offers guidance to setup in AWS and GitHub.
-3. Under the [req](req/oidc.yaml) directory exist a cloudformation template to deploy the resources for OIDC connection.
+3. Under the [req](req/oidc.yaml) directory exist a cloudformation template to deploy the prequisites resources for this project.
 4. Configure your GitHub repository for **GitHub Actions**.
