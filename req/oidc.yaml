@@ -1,0 +1,145 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Set up OIDC identity provider for GitHub in AWS and S3 bucket for terraform state files.
+
+Parameters:
+  GitHubOrg:
+    Type: String
+    Description: The Organisation name where the repo in GitHub saved.
+  
+  GithubRepositoryName:
+    Type: String
+    Description: Name of the GitHub repository
+    Default: '*'
+
+  RoleName:
+    Type: String
+    Description: Name of the IAM Role to be created.
+    Default: "GitHubOIDCRole"
+
+  GithubThumbPrint:
+    Type: CommaDelimitedList
+    Description: Thumprint for the GitHub Actions token.
+    Default: 6938fd4d98bab03faadb97b34396831e3780aea1
+
+  BucketNameTFstate:
+    Type: String
+    Description: Name of the S3 Bucket for terraform state files.
+    Default: "husain-terraform-state-ddrivers-2024"
+  DynamoDBTableProd:
+    Type: String
+    Description: Name of the DynamoDB table for State lock in production environment
+    Default: tf_lock_table_prod
+  DynamoDBTableDev:
+    Type: String
+    Description: Name of the DynamoDB table for State lock in development environment
+    Default: tf_lock_table_dev
+
+Resources:
+  GitHubOIDCProvider:
+    Type: AWS::IAM::OIDCProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList:
+        - sts.amazonaws.com
+      ThumbprintList: !Ref GithubThumbPrint
+
+  GitHubOIDCRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Ref RoleName
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Ref GitHubOIDCProvider
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+              StringLike:
+                token.actions.githubusercontent.com:sub: 
+                  - !Sub "repo:${GitHubOrg}/${GithubRepositoryName}:ref:refs/heads/main"
+                  - !Sub "repo:${GitHubOrg}/${GithubRepositoryName}:ref:refs/heads/dev*"
+                  - !Sub "repo:${GitHubOrg}/${GithubRepositoryName}:ref:refs/tags/v*"
+                  - !Sub "repo:${GitHubOrg}/${GithubRepositoryName}:environment:*"
+      Policies:
+        - PolicyName: "S3LambdaIamAccess"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: 
+                  - "s3:*"
+                  - "lambda:*"
+                  - "logs:*"
+                  - "dynamodb:*"
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    "aws:RequestedRegion": "eu-central-1"
+              - Effect: "Allow"
+                Action:
+                  - "iam:*"
+                Resource: "*"
+  S3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref BucketNameTFstate
+      VersioningConfiguration:
+        Status: Enabled
+  TerraformStateLockTableProd:
+    Type: "AWS::DynamoDB::Table"
+    Properties:
+      TableName: !Ref DynamoDBTableProd
+      AttributeDefinitions:
+        - AttributeType: "S"
+          AttributeName: "LockID"
+      KeySchema:
+        - AttributeName: "LockID"
+          KeyType: "HASH"
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+      SSESpecification:
+           SSEEnabled: true
+  TerraformStateLockTableDev:
+    Type: "AWS::DynamoDB::Table"
+    Properties:
+      TableName: !Ref DynamoDBTableDev
+      AttributeDefinitions:
+        - AttributeType: "S"
+          AttributeName: "LockID"
+      KeySchema:
+        - AttributeName: "LockID"
+          KeyType: "HASH"
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+      SSESpecification:
+           SSEEnabled: true
+
+Outputs:
+  OIDCProviderArn:
+    Description: ARN of the OIDC Provider.
+    Value: !GetAtt GitHubOIDCProvider.Arn
+
+  RoleArn:
+    Description: ARN of the IAM Role for GitHub OIDC.
+    Value: !GetAtt GitHubOIDCRole.Arn
+
+  BucketName:
+    Description: Name of the created S3 bucket for terraform state files
+    Value: !Ref S3Bucket
+    Export:
+      Name: S3BucketName
+  DynamoDBTableNameProd:
+    Description: Name of the DynamoDB table for state locking in production environment
+    Value: !Ref TerraformStateLockTableProd
+    Export:
+      Name: DynamoDBTableNameProd
+  DynamoDBTableNameDev:
+    Description: Name of the DynamoDB table for state locking in development environment
+    Value: !Ref TerraformStateLockTableDev
+    Export:
+      Name: DynamoDBTableNameDev
